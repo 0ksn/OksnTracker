@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OksnTracker — Периоды</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="/__/firebase/12.11.0/firebase-app-compat.js"></script>
+  <script defer src="/__/firebase/12.11.0/firebase-firestore-compat.js"></script>
+  <script defer src="/__/firebase/init.js"></script>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-brand" href="index.html">OksnTracker</a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">✅ Привычки</a>
+    <a class="nav-link" href="mood.html">🎨 Настроение</a>
+    <a class="nav-link active" href="period.html">📅 Периоды</a>
+  </div>
+</nav>
+
+<main class="main">
+  <div class="page-header">
+    <h1>Периоды</h1>
+    <div class="week-nav">
+      <button class="week-nav-btn" id="prevWeek">&#8249;</button>
+      <span class="week-label" id="weekLabel">…</span>
+      <button class="week-nav-btn" id="nextWeek">&#8250;</button>
+    </div>
+  </div>
+
+  <div class="table-wrapper">
+    <table id="periodTable">
+      <thead>
+        <tr id="headerRow">
+          <th class="cell-name" style="text-align:left;padding:8px 12px;">Период</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+      <tfoot>
+        <tr>
+          <td class="cell-add" colspan="99">
+            <button class="btn-add-row" id="addRowBtn">＋ Добавить строку</button>
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div style="margin-top:16px;background:#fff;border-radius:8px;border:1px solid #e2e8f0;padding:16px;font-size:0.875rem;color:#64748b;">
+    <strong style="color:#1e293b">Обозначения:</strong>
+    <span style="background:#bbf7d0;padding:2px 8px;border-radius:4px;margin:0 4px">▶ Начало</span>
+    <span style="background:#bfdbfe;padding:2px 8px;border-radius:4px;margin:0 4px">— Середина</span>
+    <span style="background:#fecaca;padding:2px 8px;border-radius:4px;margin:0 4px">◀ Конец</span>
+    · Нажмите на ячейку для отметки; первый клик — начало, второй — конец. Правый клик — очистить.
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Utilities ──────────────────────────────────────────────────────────────
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function getMondayOf(d) {
+  const date = new Date(d);
+  const dow = date.getDay();
+  date.setDate(date.getDate() - (dow === 0 ? 6 : dow - 1));
+  date.setHours(0,0,0,0);
+  return date;
+}
+
+function getWeekDates(monday) {
+  return Array.from({length:7}, (_,i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+const DAY_NAMES = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+const MONTHS    = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+
+function formatWeekLabel(monday) {
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  if (monday.getMonth() === sunday.getMonth()) {
+    return `${monday.getDate()}–${sunday.getDate()} ${MONTHS[monday.getMonth()]} ${monday.getFullYear()}`;
+  }
+  return `${monday.getDate()} ${MONTHS[monday.getMonth()]} – ${sunday.getDate()} ${MONTHS[sunday.getMonth()]} ${sunday.getFullYear()}`;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ── App state ──────────────────────────────────────────────────────────────
+let currentMonday = getMondayOf(new Date());
+let rows   = [];    // [{id, name, order, startDate, endDate}]
+let unsubRows = null;
+
+// ── Main logic ─────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const db = firebase.firestore();
+
+  function buildHeader() {
+    const headerRow = document.getElementById('headerRow');
+    while (headerRow.children.length > 1) headerRow.removeChild(headerRow.lastChild);
+    const today = isoDate(new Date());
+    getWeekDates(currentMonday).forEach((d, i) => {
+      const ds = isoDate(d);
+      const th = document.createElement('th');
+      th.dataset.date = ds;
+      if (ds === today) th.classList.add('col-today');
+      th.innerHTML = `${DAY_NAMES[i]}<br><span style="font-weight:400;font-size:0.7rem">${d.getDate()} ${MONTHS[d.getMonth()]}</span>`;
+      headerRow.appendChild(th);
+    });
+    document.getElementById('weekLabel').textContent = formatWeekLabel(currentMonday);
+  }
+
+  // Compute the marker type for a cell given the row's startDate / endDate
+  function getCellType(ds, startDate, endDate) {
+    if (!startDate && !endDate) return 'none';
+    if (ds === startDate && ds === endDate) return 'start'; // single-day period
+    if (ds === startDate) return 'start';
+    if (ds === endDate)   return 'end';
+    if (startDate && endDate && ds > startDate && ds < endDate) return 'middle';
+    if (startDate && !endDate && ds === startDate) return 'start';
+    return 'none';
+  }
+
+  function buildBody() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    const today = isoDate(new Date());
+    const weekDates = getWeekDates(currentMonday).map(d => isoDate(d));
+
+    rows.forEach(row => {
+      const tr = document.createElement('tr');
+
+      // Name cell
+      const tdName = document.createElement('td');
+      tdName.className = 'cell-name';
+      const inner = document.createElement('div');
+      inner.className = 'cell-name-inner';
+
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'name-input';
+      inp.value = row.name;
+      inp.placeholder = 'Название периода';
+      inp.addEventListener('blur', () => {
+        const v = inp.value.trim();
+        if (v !== row.name) db.collection('periodRows').doc(row.id).update({ name: v });
+      });
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn-del-row';
+      delBtn.title = 'Удалить';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', () => deleteRow(row.id));
+
+      inner.appendChild(inp);
+      inner.appendChild(delBtn);
+      tdName.appendChild(inner);
+      tr.appendChild(tdName);
+
+      // Entry cells
+      weekDates.forEach(ds => {
+        const cellType = getCellType(ds, row.startDate || null, row.endDate || null);
+        const td = document.createElement('td');
+        td.className = 'cell-entry period-cell' + (ds === today ? ' is-today' : '');
+        if (cellType !== 'none') td.classList.add(`p-${cellType}`);
+        td.dataset.rowId = row.id;
+        td.dataset.date  = ds;
+
+        if (cellType === 'start')  td.innerHTML = `<div class="period-cell-label">▶ нач</div>`;
+        if (cellType === 'end')    td.innerHTML = `<div class="period-cell-label">◀ кон</div>`;
+
+        td.addEventListener('click',       () => handleCellClick(row, ds));
+        td.addEventListener('contextmenu', e => { e.preventDefault(); clearRowPeriod(row, ds); });
+
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ── Firestore subscription ─────────────────────────────────────────────
+  function subscribeRows() {
+    if (unsubRows) unsubRows();
+    unsubRows = db.collection('periodRows')
+      .orderBy('order')
+      .onSnapshot(snap => {
+        rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        buildBody();
+      });
+  }
+
+  function changeWeek(delta) {
+    currentMonday = new Date(currentMonday);
+    currentMonday.setDate(currentMonday.getDate() + delta * 7);
+    buildHeader();
+    buildBody();
+  }
+
+  // ── Cell interaction ───────────────────────────────────────────────────
+  // Click logic:
+  //  • If row has no startDate → set this date as startDate
+  //  • If row has startDate but no endDate:
+  //      – if clicked date >= startDate → set as endDate
+  //      – else → move startDate here
+  //  • If row has both dates → if click is on start/end cell, clear that marker;
+  //                            otherwise treat as new startDate (reset)
+  function handleCellClick(row, ds) {
+    const { startDate, endDate } = row;
+
+    if (!startDate) {
+      // No period yet: set start
+      db.collection('periodRows').doc(row.id).update({ startDate: ds, endDate: null });
+      showToast('Начало периода: ' + ds);
+    } else if (!endDate) {
+      if (ds === startDate) {
+        // Clear start
+        db.collection('periodRows').doc(row.id).update({ startDate: null });
+        showToast('Начало снято');
+      } else if (ds > startDate) {
+        // Set end
+        db.collection('periodRows').doc(row.id).update({ endDate: ds });
+        showToast('Конец периода: ' + ds);
+      } else {
+        // Move start earlier
+        db.collection('periodRows').doc(row.id).update({ startDate: ds });
+        showToast('Начало периода перенесено: ' + ds);
+      }
+    } else {
+      // Both set: clicking on start or end clears it; anywhere else resets
+      if (ds === startDate) {
+        db.collection('periodRows').doc(row.id).update({ startDate: endDate, endDate: null });
+        showToast('Начало снято');
+      } else if (ds === endDate) {
+        db.collection('periodRows').doc(row.id).update({ endDate: null });
+        showToast('Конец снят');
+      } else {
+        // Start new period from this date
+        db.collection('periodRows').doc(row.id).update({ startDate: ds, endDate: null });
+        showToast('Новое начало периода: ' + ds);
+      }
+    }
+  }
+
+  function clearRowPeriod(row, ds) {
+    const { startDate, endDate } = row;
+    if (ds === startDate) {
+      db.collection('periodRows').doc(row.id).update({ startDate: null });
+    } else if (ds === endDate) {
+      db.collection('periodRows').doc(row.id).update({ endDate: null });
+    } else {
+      db.collection('periodRows').doc(row.id).update({ startDate: null, endDate: null });
+    }
+  }
+
+  function deleteRow(id) {
+    if (!confirm('Удалить строку?')) return;
+    db.collection('periodRows').doc(id).delete();
+  }
+
+  function addRow() {
+    const order = rows.length ? rows[rows.length - 1].order + 1 : 0;
+    db.collection('periodRows').add({
+      name: '',
+      order,
+      startDate: null,
+      endDate: null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
+  // ── Event listeners ────────────────────────────────────────────────────
+  document.getElementById('prevWeek').addEventListener('click', () => changeWeek(-1));
+  document.getElementById('nextWeek').addEventListener('click', () => changeWeek(1));
+  document.getElementById('addRowBtn').addEventListener('click', addRow);
+
+  // ── Bootstrap ──────────────────────────────────────────────────────────
+  buildHeader();
+  subscribeRows();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OksnTracker — Настроение</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="/__/firebase/12.11.0/firebase-app-compat.js"></script>
+  <script defer src="/__/firebase/12.11.0/firebase-firestore-compat.js"></script>
+  <script defer src="/__/firebase/init.js"></script>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-brand" href="index.html">OksnTracker</a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">✅ Привычки</a>
+    <a class="nav-link active" href="mood.html">🎨 Настроение</a>
+    <a class="nav-link" href="period.html">📅 Периоды</a>
+  </div>
+</nav>
+
+<main class="main">
+  <div class="page-header">
+    <h1>Настроение</h1>
+    <div class="week-nav">
+      <button class="week-nav-btn" id="prevWeek">&#8249;</button>
+      <span class="week-label" id="weekLabel">…</span>
+      <button class="week-nav-btn" id="nextWeek">&#8250;</button>
+    </div>
+  </div>
+
+  <div class="table-wrapper">
+    <table id="moodTable">
+      <thead>
+        <tr id="headerRow">
+          <th class="cell-name" style="text-align:left;padding:8px 12px;">Настроение</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+      <tfoot>
+        <tr class="summary-row">
+          <td class="cell-name" style="text-align:left;padding:0 12px;font-size:0.8rem;color:#64748b;font-weight:600;">
+            Итог дня
+          </td>
+          <!-- summary cells added dynamically -->
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div style="margin-top:16px;background:#fff;border-radius:8px;border:1px solid #e2e8f0;padding:16px;font-size:0.875rem;color:#64748b;">
+    <strong style="color:#1e293b">Как пользоваться:</strong>
+    нажмите на ячейку, чтобы отметить настроение за этот день.
+    Строка «Итог дня» показывает смешанный цвет активных настроений.
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Utilities ──────────────────────────────────────────────────────────────
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function getMondayOf(d) {
+  const date = new Date(d);
+  const dow = date.getDay();
+  date.setDate(date.getDate() - (dow === 0 ? 6 : dow - 1));
+  date.setHours(0,0,0,0);
+  return date;
+}
+
+function getWeekDates(monday) {
+  return Array.from({length:7}, (_,i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+const DAY_NAMES = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+const MONTHS    = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+
+function formatWeekLabel(monday) {
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  if (monday.getMonth() === sunday.getMonth()) {
+    return `${monday.getDate()}–${sunday.getDate()} ${MONTHS[monday.getMonth()]} ${monday.getFullYear()}`;
+  }
+  return `${monday.getDate()} ${MONTHS[monday.getMonth()]} – ${sunday.getDate()} ${MONTHS[sunday.getMonth()]} ${sunday.getFullYear()}`;
+}
+
+// Mood definitions
+const MOODS = [
+  { key: 'blue',   label: 'Грусть',   emoji: '😔', color: '#3b82f6', light: '#dbeafe', cls: 'on-blue',   rowCls: 'mood-row-blue'   },
+  { key: 'red',    label: 'Злость',   emoji: '😡', color: '#ef4444', light: '#fee2e2', cls: 'on-red',    rowCls: 'mood-row-red'    },
+  { key: 'yellow', label: 'Радость',  emoji: '😊', color: '#eab308', light: '#fef9c3', cls: 'on-yellow', rowCls: 'mood-row-yellow' },
+];
+
+// RGB of each mood color
+const MOOD_RGB = {
+  blue:   [59, 130, 246],
+  red:    [239, 68,  68 ],
+  yellow: [234,179,   8 ],
+};
+
+function blendColors(activeMoodKeys) {
+  if (!activeMoodKeys.length) return null;
+  const r = Math.round(activeMoodKeys.reduce((s,k) => s + MOOD_RGB[k][0], 0) / activeMoodKeys.length);
+  const g = Math.round(activeMoodKeys.reduce((s,k) => s + MOOD_RGB[k][1], 0) / activeMoodKeys.length);
+  const b = Math.round(activeMoodKeys.reduce((s,k) => s + MOOD_RGB[k][2], 0) / activeMoodKeys.length);
+  return `rgb(${r},${g},${b})`;
+}
+
+// ── App state ──────────────────────────────────────────────────────────────
+let currentMonday = getMondayOf(new Date());
+let logs = {};   // { 'moodKey_YYYY-MM-DD': true }
+let unsubLogs = null;
+
+// ── Main logic ─────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const db = firebase.firestore();
+
+  function buildHeader() {
+    const headerRow = document.getElementById('headerRow');
+    while (headerRow.children.length > 1) headerRow.removeChild(headerRow.lastChild);
+    const today = isoDate(new Date());
+    getWeekDates(currentMonday).forEach((d, i) => {
+      const ds = isoDate(d);
+      const th = document.createElement('th');
+      th.dataset.date = ds;
+      if (ds === today) th.classList.add('col-today');
+      th.innerHTML = `${DAY_NAMES[i]}<br><span style="font-weight:400;font-size:0.7rem">${d.getDate()} ${MONTHS[d.getMonth()]}</span>`;
+      headerRow.appendChild(th);
+    });
+    document.getElementById('weekLabel').textContent = formatWeekLabel(currentMonday);
+  }
+
+  function buildBody() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    const today = isoDate(new Date());
+    const weekDates = getWeekDates(currentMonday).map(d => isoDate(d));
+
+    MOODS.forEach(mood => {
+      const tr = document.createElement('tr');
+      tr.className = mood.rowCls;
+
+      // Name cell
+      const tdName = document.createElement('td');
+      tdName.className = 'cell-name';
+      tdName.innerHTML = `<div class="cell-name-inner" style="gap:8px">
+        <span style="font-size:1.1rem">${mood.emoji}</span>
+        <span style="font-size:0.875rem;font-weight:500">${mood.label}</span>
+      </div>`;
+      tr.appendChild(tdName);
+
+      // Entry cells
+      weekDates.forEach(ds => {
+        const key = `${mood.key}_${ds}`;
+        const td = document.createElement('td');
+        td.className = 'cell-entry mood-cell' + (ds === today ? ' is-today' : '');
+        if (logs[key]) td.classList.add(mood.cls);
+        td.dataset.key = key;
+        td.dataset.moodKey = mood.key;
+        td.dataset.date = ds;
+        td.addEventListener('click', () => toggleMood(td, key, mood));
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    updateSummaryRow(weekDates);
+  }
+
+  function updateSummaryRow(weekDates) {
+    const summaryRow = document.querySelector('.summary-row');
+    // remove old summary cells
+    while (summaryRow.children.length > 1) summaryRow.removeChild(summaryRow.lastChild);
+
+    const today = isoDate(new Date());
+    weekDates.forEach(ds => {
+      const activeMoods = MOODS.filter(m => logs[`${m.key}_${ds}`]).map(m => m.key);
+      const blended = blendColors(activeMoods);
+      const td = document.createElement('td');
+      td.className = 'summary-cell cell-entry' + (ds === today ? ' is-today' : '');
+      td.style.background = blended || '';
+      if (activeMoods.length > 0) {
+        td.title = activeMoods.map(k => MOODS.find(m => m.key === k).label).join(' + ');
+      }
+      summaryRow.appendChild(td);
+    });
+  }
+
+  function subscribeLogs() {
+    if (unsubLogs) unsubLogs();
+    const weekDates = getWeekDates(currentMonday).map(d => isoDate(d));
+    const start = weekDates[0];
+    const end   = weekDates[6];
+    unsubLogs = db.collection('moodLogs')
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .onSnapshot(snap => {
+        Object.keys(logs).forEach(k => { delete logs[k]; });
+        snap.docs.forEach(d => {
+          const data = d.data();
+          if (data.active) logs[`${data.moodKey}_${data.date}`] = true;
+        });
+        buildBody();
+      });
+  }
+
+  function changeWeek(delta) {
+    currentMonday = new Date(currentMonday);
+    currentMonday.setDate(currentMonday.getDate() + delta * 7);
+    subscribeLogs();
+    buildHeader();
+  }
+
+  function toggleMood(td, key, mood) {
+    const date = td.dataset.date;
+    const isActive = !!logs[key];
+    const next = !isActive;
+
+    // Optimistic update
+    if (next) { logs[key] = true; td.classList.add(mood.cls); }
+    else { delete logs[key]; td.classList.remove(mood.cls); }
+
+    // Rebuild summary for this date
+    const weekDates = getWeekDates(currentMonday).map(d => isoDate(d));
+    updateSummaryRow(weekDates);
+
+    // Firestore write
+    if (next) {
+      db.collection('moodLogs').doc(key).set({ moodKey: mood.key, date, active: true });
+    } else {
+      db.collection('moodLogs').doc(key).delete();
+    }
+  }
+
+  // ── Event listeners ────────────────────────────────────────────────────
+  document.getElementById('prevWeek').addEventListener('click', () => changeWeek(-1));
+  document.getElementById('nextWeek').addEventListener('click', () => changeWeek(1));
+
+  // ── Bootstrap ──────────────────────────────────────────────────────────
+  buildHeader();
+  subscribeLogs();
+});
+</script>
+</body>
+</html>

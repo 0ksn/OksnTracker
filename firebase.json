@@ -5,6 +5,15 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "rewrites": [
+      { "source": "/habits", "destination": "/index.html" },
+      { "source": "/mood",   "destination": "/mood.html"  },
+      { "source": "/period", "destination": "/period.html" }
     ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   }
 }

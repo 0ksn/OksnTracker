@@ -1,89 +1,375 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OksnTracker — Привычки</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="/__/firebase/12.11.0/firebase-app-compat.js"></script>
+  <script defer src="/__/firebase/12.11.0/firebase-firestore-compat.js"></script>
+  <script defer src="/__/firebase/init.js"></script>
+</head>
+<body>
 
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/12.11.0/firebase-app-compat.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/12.11.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/12.11.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/12.11.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/12.11.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/12.11.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/12.11.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/12.11.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/12.11.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.11.0/firebase-performance-compat.js"></script>
-    <!-- 
-      initialize the SDK after all desired features are loaded, set useEmulator to false
-      to avoid connecting the SDK to running emulators.
-    -->
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+<nav class="nav">
+  <a class="nav-brand" href="index.html">OksnTracker</a>
+  <div class="nav-links">
+    <a class="nav-link active" href="index.html">✅ Привычки</a>
+    <a class="nav-link" href="mood.html">🎨 Настроение</a>
+    <a class="nav-link" href="period.html">📅 Периоды</a>
+  </div>
+</nav>
 
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
+<main class="main">
+  <div class="page-header">
+    <h1>Привычки</h1>
+    <div class="week-nav">
+      <button class="week-nav-btn" id="prevWeek" title="Предыдущая неделя">&#8249;</button>
+      <span class="week-label" id="weekLabel">…</span>
+      <button class="week-nav-btn" id="nextWeek" title="Следующая неделя">&#8250;</button>
     </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
+    <div class="actions">
+      <button class="btn btn-outline" id="reportBtn">📊 Отчёт</button>
+    </div>
+  </div>
 
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.querySelector('#load');
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-        // // The Firebase SDK is initialized and available here!
-        //
-        // firebase.auth().onAuthStateChanged(user => { });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.firestore().doc('/foo/bar').get().then(() => { });
-        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        // firebase.analytics(); // call to activate
-        // firebase.analytics().logEvent('tutorial_completed');
-        // firebase.performance(); // call to activate
-        //
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+  <div class="table-wrapper">
+    <table id="habitsTable">
+      <thead>
+        <tr id="headerRow">
+          <th class="cell-name" style="text-align:left;padding:8px 12px;">Привычка</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+      <tfoot>
+        <tr>
+          <td class="cell-add" colspan="99">
+            <button class="btn-add-row" id="addHabitBtn">＋ Добавить привычку</button>
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</main>
 
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
-        }
+<!-- Report modal -->
+<div class="modal-backdrop hidden" id="reportModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <span class="modal-title">📊 Аналитика привычек</span>
+      <button class="modal-close" id="closeReport">✕</button>
+    </div>
+    <div id="reportContent"></div>
+    <div class="export-btn-row">
+      <button class="btn btn-primary" id="exportCsvBtn">⬇ Скачать CSV</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Utilities ──────────────────────────────────────────────────────────────
+function isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getMondayOf(d) {
+  const date = new Date(d);
+  const dow = date.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function getWeekDates(monday) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const MONTHS    = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+
+function formatWeekLabel(monday) {
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  if (monday.getMonth() === sunday.getMonth()) {
+    return `${monday.getDate()}–${sunday.getDate()} ${MONTHS[monday.getMonth()]} ${monday.getFullYear()}`;
+  }
+  return `${monday.getDate()} ${MONTHS[monday.getMonth()]} – ${sunday.getDate()} ${MONTHS[sunday.getMonth()]} ${sunday.getFullYear()}`;
+}
+
+// Cycle: '' → '✓' → '⭐' → '🔥' → ''
+const CYCLE = ['', '✓', '⭐', '🔥'];
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ── App state ──────────────────────────────────────────────────────────────
+let currentMonday = getMondayOf(new Date());
+let habits = [];    // [{id, name, order}]
+let logs   = {};    // { 'habitId_YYYY-MM-DD': value }
+let unsubHabits = null;
+let unsubLogs   = null;
+
+// ── Main logic ─────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const db = firebase.firestore();
+
+  function buildHeader() {
+    const headerRow = document.getElementById('headerRow');
+    while (headerRow.children.length > 1) headerRow.removeChild(headerRow.lastChild);
+    const today = isoDate(new Date());
+    getWeekDates(currentMonday).forEach((d, i) => {
+      const ds = isoDate(d);
+      const th = document.createElement('th');
+      th.dataset.date = ds;
+      if (ds === today) th.classList.add('col-today');
+      th.innerHTML = `${DAY_NAMES[i]}<br><span style="font-weight:400;font-size:0.7rem">${d.getDate()} ${MONTHS[d.getMonth()]}</span>`;
+      headerRow.appendChild(th);
+    });
+    document.getElementById('weekLabel').textContent = formatWeekLabel(currentMonday);
+  }
+
+  function buildBody() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    const today = isoDate(new Date());
+    const weekDates = getWeekDates(currentMonday).map(d => isoDate(d));
+
+    habits.forEach(habit => {
+      const tr = document.createElement('tr');
+
+      // Name cell
+      const tdName = document.createElement('td');
+      tdName.className = 'cell-name';
+      const inner = document.createElement('div');
+      inner.className = 'cell-name-inner';
+
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'name-input';
+      inp.value = habit.name;
+      inp.placeholder = 'Название привычки';
+      inp.addEventListener('blur', () => {
+        const v = inp.value.trim();
+        if (v !== habit.name) saveHabitName(habit.id, v);
       });
-    </script>
-  </body>
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn-del-row';
+      delBtn.title = 'Удалить';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', () => deleteHabit(habit.id));
+
+      inner.appendChild(inp);
+      inner.appendChild(delBtn);
+      tdName.appendChild(inner);
+      tr.appendChild(tdName);
+
+      // Entry cells
+      weekDates.forEach(ds => {
+        const key = `${habit.id}_${ds}`;
+        const td = document.createElement('td');
+        td.className = 'cell-entry' + (ds === today ? ' is-today' : '');
+        td.dataset.key = key;
+        td.dataset.habitId = habit.id;
+        td.dataset.date = ds;
+        td.textContent = logs[key] || '';
+        td.addEventListener('click', () => cycleEntry(td, key));
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderTable() {
+    buildHeader();
+    buildBody();
+  }
+
+  // ── Firestore subscriptions ────────────────────────────────────────────
+  function subscribeHabits() {
+    if (unsubHabits) unsubHabits();
+    unsubHabits = db.collection('habits')
+      .orderBy('order')
+      .onSnapshot(snap => {
+        habits = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderTable();
+      });
+  }
+
+  function subscribeLogs() {
+    if (unsubLogs) unsubLogs();
+    const weekDates = getWeekDates(currentMonday).map(d => isoDate(d));
+    const start = weekDates[0];
+    const end   = weekDates[6];
+    unsubLogs = db.collection('habitLogs')
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .onSnapshot(snap => {
+        Object.keys(logs).forEach(k => { delete logs[k]; });
+        snap.docs.forEach(d => {
+          const data = d.data();
+          if (data.value) logs[`${data.habitId}_${data.date}`] = data.value;
+        });
+        buildBody();
+      });
+  }
+
+  function changeWeek(delta) {
+    currentMonday = new Date(currentMonday);
+    currentMonday.setDate(currentMonday.getDate() + delta * 7);
+    subscribeLogs();
+    buildHeader();
+  }
+
+  // ── Mutations ──────────────────────────────────────────────────────────
+  function cycleEntry(td, key) {
+    const habitId = td.dataset.habitId;
+    const date    = td.dataset.date;
+    const current = logs[key] || '';
+    const idx     = CYCLE.indexOf(current);
+    const next    = CYCLE[(idx + 1) % CYCLE.length];
+
+    if (next) { logs[key] = next; } else { delete logs[key]; }
+    td.textContent = next;
+
+    if (next) {
+      db.collection('habitLogs').doc(key).set({ habitId, date, value: next });
+    } else {
+      db.collection('habitLogs').doc(key).delete();
+    }
+  }
+
+  function saveHabitName(id, name) {
+    if (!name) return;
+    db.collection('habits').doc(id).update({ name });
+  }
+
+  function deleteHabit(id) {
+    if (!confirm('Удалить привычку?')) return;
+    db.collection('habits').doc(id).delete();
+    db.collection('habitLogs').where('habitId', '==', id).get().then(snap => {
+      const batch = db.batch();
+      snap.docs.forEach(d => batch.delete(d.ref));
+      return batch.commit();
+    });
+  }
+
+  function addHabit() {
+    const order = habits.length ? habits[habits.length - 1].order + 1 : 0;
+    db.collection('habits').add({
+      name: '',
+      order,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
+  // ── Report ─────────────────────────────────────────────────────────────
+  let reportAllHabits = [];
+  let reportAllLogs   = [];
+
+  function openReport() {
+    document.getElementById('reportContent').innerHTML = '<p style="color:#64748b;padding:12px 0">Загрузка…</p>';
+    document.getElementById('reportModal').classList.remove('hidden');
+
+    Promise.all([
+      db.collection('habitLogs').get(),
+      db.collection('habits').orderBy('order').get()
+    ]).then(([logsSnap, habitsSnap]) => {
+      reportAllHabits = habitsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      reportAllLogs   = logsSnap.docs.map(d => d.data());
+
+      const allDates = [...new Set(reportAllLogs.map(l => l.date))];
+      const totalDone = reportAllLogs.filter(l => l.value).length;
+      const totalPossible = reportAllHabits.length * (allDates.length || 1);
+      const overallPct = totalPossible ? Math.round(totalDone / totalPossible * 100) : 0;
+      const minDate = allDates.sort()[0] || '—';
+      const maxDate = allDates.sort()[allDates.length - 1] || '—';
+
+      const habitStats = reportAllHabits.map(h => {
+        const count = reportAllLogs.filter(l => l.habitId === h.id && l.value).length;
+        return { name: h.name || '(без названия)', count };
+      });
+      const maxCount = Math.max(...habitStats.map(x => x.count), 1);
+
+      document.getElementById('reportContent').innerHTML = `
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-label">Привычки</div><div class="stat-value">${reportAllHabits.length}</div></div>
+          <div class="stat-card"><div class="stat-label">Выполнений</div><div class="stat-value">${totalDone}</div></div>
+          <div class="stat-card"><div class="stat-label">Общий %</div><div class="stat-value">${overallPct}%</div></div>
+          <div class="stat-card"><div class="stat-label">Период</div><div class="stat-value" style="font-size:0.875rem;margin-top:4px">${minDate}<br>${maxDate}</div></div>
+        </div>
+        <div class="section-title">По привычкам</div>
+        <div>
+          ${habitStats.map(s => {
+            const pct = Math.round(s.count / maxCount * 100);
+            return `<div class="habit-stat-row">
+              <span class="habit-stat-name">${s.name}</span>
+              <div class="habit-stat-bar-wrap"><div class="habit-stat-bar-fill" style="width:${pct}%"></div></div>
+              <span class="habit-stat-pct">${s.count} раз</span>
+            </div>`;
+          }).join('')}
+        </div>`;
+    });
+  }
+
+  function exportCsv() {
+    const dates = [...new Set(reportAllLogs.map(l => l.date))].sort();
+    const header = ['Дата', ...reportAllHabits.map(h => h.name || '?')];
+    const rows = dates.map(date => {
+      const row = [date];
+      reportAllHabits.forEach(h => {
+        const entry = reportAllLogs.find(l => l.habitId === h.id && l.date === date);
+        row.push(entry ? (entry.value || '') : '');
+      });
+      return row;
+    });
+    const csv = [header, ...rows]
+      .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `habits_${isoDate(new Date())}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV скачан');
+  }
+
+  // ── Event listeners ────────────────────────────────────────────────────
+  document.getElementById('prevWeek').addEventListener('click', () => changeWeek(-1));
+  document.getElementById('nextWeek').addEventListener('click', () => changeWeek(1));
+  document.getElementById('addHabitBtn').addEventListener('click', addHabit);
+  document.getElementById('reportBtn').addEventListener('click', openReport);
+  document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+  document.getElementById('closeReport').addEventListener('click', () => {
+    document.getElementById('reportModal').classList.add('hidden');
+  });
+  document.getElementById('reportModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('reportModal'))
+      document.getElementById('reportModal').classList.add('hidden');
+  });
+
+  // ── Bootstrap ──────────────────────────────────────────────────────────
+  subscribeHabits();
+  subscribeLogs();
+});
+</script>
+</body>
 </html>
